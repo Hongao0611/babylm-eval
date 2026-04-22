@@ -26,7 +26,7 @@ The `run.py` file is the main file you will interact with. It does the entire ze
 parser.add_argument("--data_path", default="", type=pathlib.Path, help="Path to the data directory")
 parser.add_argument("--output_dir", default="results", type=pathlib.Path, help="Path to the data directory")
 parser.add_argument("--task", default="blimp", type=str, help="The task that is being evaluated.",
-                    choices=["blimp", "ewok", "entity_tracking", "wug"])
+                    choices=["blimp", "ewok", "entity_tracking"])
 
 parser.add_argument("--model_path_or_name", default="ltg/gpt-bert-babylm-small", type=str, help="Path to the model to evaluate.")
 parser.add_argument("--backend", default="mlm", type=str, help="The evaluation backend strategy", choices=["mlm", "causal", "mntp", "enc_dec_mask", "enc_dec_prefix"])

@@ -70,8 +70,6 @@ def decode(line: str, file_name: pathlib.Path, task: str, full_sentence_scores: 
         data_dict = decode_blimp(raw_dict, file_name)
     elif task == "ewok":
         data_dict = decode_ewok(raw_dict, full_sentence_scores)
-    elif "wug" in task:
-        data_dict = decode_wug(raw_dict, task)
     elif task == "entity_tracking":
         data_dict = decode_entity_tracking(raw_dict, file_name)
     elif task == "comps":
@@ -156,34 +154,6 @@ def decode_ewok(raw_dict: dict[str, Any], full_sentence_scores: bool) -> dict[st
     }
 
     return pair
-
-
-def decode_wug(raw_dict: dict[str, Any], task: str) -> dict[str, str]:
-    """This function takes a dictionary of a single datapoint
-    of the wug test datafile and returns a dictionary of terms
-    to be used by the evaluation.
-
-    Args:
-        raw_dict(dict[str, Any]): A dictionary from a single
-            datapoint of a BLiMP datafile.
-        file_name(pathlib.Path): When no UID is mentioned, we
-            take the file name.
-
-    Returns:
-        dict[str, str]: A dictionary with values used for
-            evaluation.
-    """
-    pair = {
-        "sentences": raw_dict["sentences"].split('\t'),
-        "prefixes": [None],
-        "completions": raw_dict["sentences"].split('\t'),
-        "ratio": float(raw_dict["ratio"]),
-        "label": 0,
-        "UID": task,
-    }
-
-    return pair
-
 
 def decode_entity_tracking(raw_dict: dict[str, Any], file_name: pathlib.Path) -> dict[str, str]:
     """This function takes a dictionary of a single datapoint

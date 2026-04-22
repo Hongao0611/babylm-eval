@@ -4,7 +4,6 @@ import json
 import pathlib
 import argparse
 import numpy as np
-from scipy.stats import spearmanr
 from collections import defaultdict
 import pandas as pd
 import statsmodels.formula.api as smf
@@ -22,8 +21,6 @@ EWOK_FAST_SIZE = 100
 ENTITY_TRACKING_FAST_SIZE = {"regular_0_ops": 606, "regular_1_ops": 607, "regular_2_ops": 606, "regular_3_ops": 606, "regular_4_ops": 568, "regular_5_ops": 159}
 
 READING_SIZE = 1726
-WUG_SIZE = 200
-WUG_PAST_TENSE_SIZE = 50
 
 WINOGROUND_SIZE = 746
 VQA_SIZE = 25230
@@ -157,8 +154,6 @@ FAST_SIZES = {
     "blimp_supplement": SUPPLEMENT_FAST_SIZE,
     "entity_tracking": ENTITY_TRACKING_FAST_SIZE,
     "reading": READING_SIZE,
-    "wug_adj": WUG_SIZE,
-    "wug_past": WUG_PAST_TENSE_SIZE
 }
 FULL_SIZES = {
     "ewok": EWOK_SIZES,
@@ -166,8 +161,6 @@ FULL_SIZES = {
     "blimp_supplement": SUPPLEMENT_SIZES,
     "entity_tracking": ENTITY_TRACKING_SIZES,
     "reading": READING_SIZE,
-    "wug_adj": WUG_SIZE,
-    "wug_past": WUG_PAST_TENSE_SIZE,
     "comps": COMPS_SIZES,
     "boolq": BOOLQ_SIZE,
     "mnli": MNLI_SIZE,
@@ -232,12 +225,6 @@ def _check_validity_of_dir(args: argparse.Namespace, revision_name: str, fast: b
         if not (zero_shot_path / "entity_tracking" / "entity_tracking_fast" / "predictions.json").exists():
             print("The entity tracking data is missing!")
             valid = False
-        if not (zero_shot_path / "wug_adj" / "wug_adj_nominalization" / "predictions.json").exists():
-            print("The wug adj nominalization data is missing!")
-            valid = False
-        if not (zero_shot_path / "wug_past" / "wug_past_tense" / "predictions.json").exists():
-            print("The wug past tense data is missing!")
-            valid = False
         if not (zero_shot_path / "reading" / "predictions.json").exists():
             print("The reading data is missing!")
             valid = False
@@ -274,12 +261,6 @@ def _check_validity_of_dir(args: argparse.Namespace, revision_name: str, fast: b
             valid = False
         if not (zero_shot_path / "entity_tracking" / "entity_tracking" / "predictions.json").exists():
             print("The entity tracking data is missing!")
-            valid = False
-        if not (zero_shot_path / "wug_adj" / "wug_adj_nominalization" / "predictions.json").exists():
-            print("The wug adj nominalization data is missing!")
-            valid = False
-        if not (zero_shot_path / "wug_past" / "wug_past_tense" / "predictions.json").exists():
-            print("The wug past tense data is missing!")
             valid = False
         if not (zero_shot_path / "comps" / "comps" / "predictions.json").exists():
             print("The comps data is missing!")
@@ -429,17 +410,7 @@ def collate_full_eval_preds(args):
     assert _check_size("entity_tracking", et_results, fast=False), "The Entity Tracking data is incorrect"
     full_results["entity_tracking"] = et_results
 
-    # WUG_ADJ
-    wug_results: dict[str, dict[str, list[dict[str, str | int | float]]]] = _load_results(zero_main_path / "wug_adj" / "wug_adj_nominalization" / "predictions.json")
-    assert _check_size("wug_adj", wug_results, fast=False), "The WUG Adjective Nominalization data is incorrect"
-    full_results["wug_adj"] = wug_results
-
-    # WUG_PAST
-    wug_results: dict[str, dict[str, list[dict[str, str | int | float]]]] = _load_results(zero_main_path / "wug_past" / "wug_past_tense" / "predictions.json")
-    assert _check_size("wug_past", wug_results, fast=False), "The WUG Past Tense data is incorrect"
-    full_results["wug_past"] = wug_results
-
-    # WUG_PAST
+    # COMPS
     comps_results: dict[str, dict[str, list[dict[str, str | int | float]]]] = _load_results(zero_main_path / "comps" / "comps" / "predictions.json")
     assert _check_size("comps", comps_results, fast=False), "The COMPS data is incorrect"
     full_results["comps"] = comps_results
@@ -500,8 +471,7 @@ def collate_full_eval_preds(args):
 def get_fast_eval_metrics(args):
     fast_eval_results = {
         "blimp" : [], "blimp_supplement" : [], "ewok" : [],
-        "entity_tracking" : [], "wug_adj" : [],
-        "wug_past" : [], "reading" : []
+        "entity_tracking" : [], "reading" : []
     }
     revision_list = STRICT_SMALL_FAST_REVISIONS if args.track == "strict-small" else OTHER_FAST_REVISIONS
     for revision_name in revision_list:
@@ -535,16 +505,6 @@ def get_revision_fast_eval_metrics(args, revision_name):
     et_results: dict[str, dict[str, list[dict[str, str | int | float]]]] = _load_results(main_path / "entity_tracking" / "entity_tracking_fast" / "predictions.json")
     assert _check_size("entity_tracking", et_results, True), "The Entity Tracking Fast data is incorrect"
     revision_results["entity_tracking"] = _calculate_target_et_results(et_results, data_path / "entity_tracking_fast")
-
-    # WUG_ADJ
-    wug_results: dict[str, dict[str, list[dict[str, str | int | float]]]] = _load_results(main_path / "wug_adj" / "wug_adj_nominalization" / "predictions.json")
-    assert _check_size("wug_adj", wug_results, True), "The WUG Adjective Nominalization data is incorrect"
-    revision_results["wug_adj"] = _calculate_wugs_results(wug_results, "wug_adj_nominalization", data_path / "wug_adj_nominalization")
-
-    # WUG_PAST
-    wug_results: dict[str, dict[str, list[dict[str, str | int | float]]]] = _load_results(main_path / "wug_past" / "wug_past_tense" / "predictions.json")
-    assert _check_size("wug_past", wug_results, True), "The WUG_PAST data is incorrect"
-    revision_results["wug_past"] = _calculate_wugs_results(wug_results, "wug_past_tense", data_path / "wug_past_tense")
 
     # Reading
     read_results: dict[str, dict[str, list[dict[str, str | int | float]]]] = _load_results(main_path / "reading" / "predictions.json")
@@ -593,26 +553,6 @@ def _calculate_target_et_results(results_dict: dict[str, dict[str, list[dict[str
             if res == target:
                 correct += 1
         processed_results[subtask] = correct / total
-    return processed_results
-
-
-def _calculate_wugs_results(results_dict: dict[str, dict[str, list[dict[str, str]]]], task: str, path_to_data: Path) -> dict[str, float]:
-    processed_results = {}
-
-    for subtask in results_dict.keys():
-        model_ratios = []
-        human_ratios = []
-
-        preds = []
-        with (path_to_data / task).with_suffix(".jsonl").open("r") as data_file:
-            subtask_results = results_dict[subtask]["predictions"]
-            for result, data in zip(subtask_results, data_file.readlines()):
-                data = json.loads(data)
-                human_ratios.append(data["ratio"])
-                model_ratios.append(result["prob"])
-                preds.append(result["pred"] in data["sentences"])
-            processed_results[subtask] = spearmanr(model_ratios, human_ratios)[0]
-
     return processed_results
 
 

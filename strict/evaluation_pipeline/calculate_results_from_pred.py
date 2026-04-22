@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pandas as pd
 import statsmodels.formula.api as smf
-from scipy.stats import spearmanr
 
 from utils import AoAEvaluator
 
@@ -94,22 +93,6 @@ def _calculate_ewok_results(
                     correct += 1
             scores.append((correct / total) * 100)
     return sum(scores) / len(scores)
-
-
-def _calculate_wug_results(
-    results_dict: dict[str, dict[str, list[dict[str, str]]]], path_to_data: Path
-) -> float:
-    model_ratios = []
-    human_ratios = []
-    for subtask in results_dict.keys():
-        file = "wug_adj_nominalization" if subtask == "wug_adj" else "wug_past_tense"
-        with (path_to_data / file).with_suffix(".jsonl").open("r") as data_file:
-            subtask_results = results_dict[subtask]["predictions"]
-            for result, data in zip(subtask_results, data_file.readlines()):
-                data = json.loads(data)
-                human_ratios.append(data["ratio"])
-                model_ratios.append(result["prob"])
-    return spearmanr(model_ratios, human_ratios)[0] * 100
 
 
 def _calculate_entity_tracking_results(
@@ -305,16 +288,6 @@ if __name__ == "__main__":
             all_results["entity_tracking"], evaluation_path / "entity_tracking_fast"
         )
         print(f"ENTITY TRACKING\t{score:.2f}")
-        # WUG ADJ NOMINALIZATION
-        score = _calculate_wug_results(
-            all_results["wug_adj"], evaluation_path / "wug_adj_nominalization"
-        )
-        print(f"WUG ADJ\t\t{score:.2f}")
-        # WUG PAST TENSE
-        score = _calculate_wug_results(
-            all_results["wug_past"], evaluation_path / "wug_past_tense"
-        )
-        print(f"WUG PAST\t\t{score:.2f}")
         # Reading (SPR)
         scores = _calculate_reading_results(
             all_results["reading"], evaluation_path / "reading" / "reading_data.csv"
@@ -347,16 +320,6 @@ if __name__ == "__main__":
             all_results["entity_tracking"], evaluation_path / "entity_tracking"
         )
         print(f"ENTITY TRACKING\t{score:.2f}")
-        # WUG ADJ NOMINALIZATION
-        score = _calculate_wug_results(
-            all_results["wug_adj"], evaluation_path / "wug_adj_nominalization"
-        )
-        print(f"WUG ADJ\t\t{score:.2f}")
-        # WUG PAST TENSE
-        score = _calculate_wug_results(
-            all_results["wug_past"], evaluation_path / "wug_past_tense"
-        )
-        print(f"WUG PAST\t{score:.2f}")
         # COMPS
         score = _calculate_comps_results(
             all_results["comps"], evaluation_path / "comps"

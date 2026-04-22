@@ -58,7 +58,16 @@ def rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, label
     """
     for temp, temp_dict in subset_to_stats.items():
         stacked_probs = torch.stack(all_log_probs[temp], dim=1)
-        chosen_sentences = torch.max(stacked_probs, dim=1)[1].tolist()
+        stacked_probs = torch.where(torch.isnan(stacked_probs), torch.tensor(float('-inf')), stacked_probs)
+        max_values, max_indices = torch.max(stacked_probs, dim=1)
+        chosen_sentences = []
+        for i in range(stacked_probs.size(0)):
+            tied_mask = stacked_probs[i] == max_values[i]
+            if tied_mask.sum() > 1:
+                tied_indices = torch.where(tied_mask)[0]
+                chosen_sentences.append(tied_indices[torch.randint(len(tied_indices), (1,))].item())
+            else:
+                chosen_sentences.append(max_indices[i].item())
 
         for raw_sentence_dict, chosen_sentence, label, metadata, uid in zip(raw_sentences, chosen_sentences, labels, metadatas, uids):
             is_correct = chosen_sentence == label
@@ -72,32 +81,6 @@ def rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, label
                     predictions[temp][uid].append({"id" : f"{uid}_{num_id_matches}", "pred" : raw_sentence_dict["sentences"][chosen_sentence]})
                 else:
                     predictions[temp][uid].append({"id" : f"{uid}_{num_id_matches}", "pred" : raw_sentence_dict["completions"][chosen_sentence]})
-
-
-def rank_and_evaluate_wug(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions):
-    """Creates the model-human correlations of the morphological wug tasks. """
-    for temp, temp_dict in subset_to_stats.items():
-        stacked_probs = torch.stack(all_log_probs[temp], dim=1)
-        chosen_sentences = torch.max(stacked_probs, dim=1)[1].tolist()
-
-        stacked_probs = torch.nn.functional.softmax(stacked_probs, dim=1)
-
-        for key in ["model_ratios", "human_ratios"]:
-            if key not in temp_dict:
-                temp_dict[key] = []
-        for raw_sentence_dict, chosen_sentence, label, metadata, uid, prob in zip(raw_sentences, chosen_sentences, labels, metadatas, uids, stacked_probs[:, 0]):
-            temp_dict["model_ratios"].append(prob)
-            temp_dict["human_ratios"].append(metadata['ratio'])
-
-            if args.save_predictions:
-                num_id_matches = len(predictions[temp][uid])
-                prediction = {"id": f"{uid}_{num_id_matches}", "pred": raw_sentence_dict["completions"][chosen_sentence]}
-                prediction["prob"] = prob.item()
-
-                predictions[temp][uid].append(prediction)
-
-        temp_dict["correlation"] = spearmanr(temp_dict["model_ratios"], temp_dict["human_ratios"])[0]
-
 
 def compute_causal_results(args, model, dataloader, temperatures):
     subset_to_stats = {temp : {} for temp in temperatures}
@@ -140,10 +123,7 @@ def compute_causal_results(args, model, dataloader, temperatures):
                 phrase_log_probs = torch.sum(target_log_probs * sentence_dict[f"{prefix}_phrase_mask"].to(DEVICE), dim=1)
                 all_log_probs[temp].append(phrase_log_probs.cpu())
 
-        if "wug" in args.task:
-            rank_and_evaluate_wug(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
-        else:
-            rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
+        rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
 
     if args.save_predictions:
         for i in temperatures:
@@ -226,10 +206,7 @@ def compute_mlm_results(args, model, dataloader, temperatures):
                     curr_idx += examples_per_batch
                 all_log_probs[temp].append(torch.tensor(summed_log_probs))
 
-        if "wug" in args.task:
-            rank_and_evaluate_wug(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
-        else:
-            rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
+        rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
 
     if args.save_predictions:
         for i in temperatures:
@@ -313,10 +290,7 @@ def compute_enc_dec_mask_results(args, model, dataloader, temperatures):
                     curr_idx += examples_per_batch
                 all_log_probs[temp].append(torch.tensor(summed_log_probs))
 
-        if "wug" in args.task:
-            rank_and_evaluate_wug(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
-        else:
-            rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
+        rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
 
     if args.save_predictions:
         for i in temperatures:
@@ -372,10 +346,7 @@ def compute_enc_dec_prefix_results(args, model, dataloader, temperatures):
                 phrase_log_probs = torch.sum(target_log_probs * sentence_dict[f"{prefix}_phrase_mask"].to(DEVICE), dim=1)
                 all_log_probs[temp].append(phrase_log_probs.cpu())
 
-        if "wug" in args.task:
-            rank_and_evaluate_wug(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
-        else:
-            rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
+        rank_and_evaluate(args, subset_to_stats, all_log_probs, raw_sentences, labels, metadatas, uids, predictions)
 
     if args.save_predictions:
         for i in temperatures:
