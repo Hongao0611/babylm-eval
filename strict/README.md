@@ -2,7 +2,7 @@
 
 ## Overview
 
-This code provides the backend for evaluating models participating in the Strict and Strict-small track of BabyLM. The code for this has been adapted from last years iteration. 
+This code provides the backend for evaluating models participating in the Strict and Strict-small track of BabyLM. The code for this has been adapted from last year's iteration. 
 
 An addition from last year that we keep is that we have two evaluation types: **fast** evaluation uses a smaller set of evaluation samples, allows for quick testing of your models, and is what you will report performance on for the intermediate model checkpoints. The **full** evaluation should be run on your final model.
 
@@ -90,29 +90,18 @@ results
 
 ## Data
 
-Download the `evaluation_data` folder in [this OSF directory](https://osf.io/ryjfm/). Place it in the root directory of this repository.
+All evaluation datasets are stored on HuggingFace. To download them onto this repo, you should first log into your HuggingFace account in your terminal by running `huggingface-cli login` and then entering your login token.
+After this, you can download a majority of the evaluation datasets by running
 
-> [!NOTE]
-> You can download files from OSF using the osfclient. 
-
-Due to large file sizes and license restrictions, we do not provide images in the OSF directory of the evaluation tasks for the multimodal track. Instead, we link to HuggingFace datasets, two of which require approval (which is immediate). Go to this URL to download this dataset:
-- [Winoground](https://huggingface.co/datasets/facebook/winoground)
-
-Furthermore, the EWoK data requires agreeing to the terms & conditions on the HuggingFace Hub, which can be agreed to here:
-- [EWoK](https://huggingface.co/datasets/ewok-core/ewok-core-1.0)
-
-For the EWoK fast dataset found in the [OSF](https://osf.io/ryjfm), the password to unzip the file is: BabyLM2025
-
-On both pages, make sure you're logged in to your HuggingFace account, and request approval. Then, in your terminal, log in to your account using `huggingface-cli login`, and enter your HuggingFace login token.
-
-For EWoK data, run `python -m evaluation_pipeline.ewok.dl_and_filter` from the root directory of this repository.
-
-For the fast EWoK data, we provide a password-protected ZIP file called `ewok_fast.zip`.
-
-For the DevBench data make sure to run:
-```bash
-./evaluation_pipeline/devbench/download_data.sh
 ```
+python -m scripts.download_evals
+```
+
+This will download all evaluation datasets except for the full EWoK data. For EWoK, first agree to the terms & conditions on the dataset's HuggingFace page:
+- [EWoK](https://huggingface.co/datasets/ewok-core/ewok-core-1.0)
+Afterwards, run `python -m evaluation_pipeline.ewok.dl_and_filter` from this folder (i.e., `strict`) to download the full EWoK dataset.
+
+Finally, the EWoK fast dataset, which should be located under `evaluation_data/fast_eval/ewok_fast.zip` following the downloads, is password protected. The password to unzip the file is: BabyLM2025
 
 ## Evaluation 
 

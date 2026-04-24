@@ -46,7 +46,7 @@ To restrict to specific languages:
 bash scripts/zeroshot_model.sh --model_name YOUR_MODEL --langs "eng nld"
 ```
 
-Results are written to `results/<org__model>/results_<timestamp>.json`.
+Results are written to `results/main/<org__model>/results_<timestamp>.json`.
 
 ### Finetune
 
@@ -66,6 +66,17 @@ Optional hyperparameter flags:
 
 Results are written to `finetune/results/<model>/<lang>/<task>/`.
 
+### Intermediate Checkpoint Evaluations
+
+As in the Strict and Strict-small tracks, we expect challenge participants to evaluate intermediate checkpoints on zero-shot tasks. These can be run via:
+
+```bash
+bash scripts/zeroshot_model_fast_all.sh --model_name YOUR_MODEL # to run on all languages
+bash scripts/zeroshot_model_fast_all.sh --model_name YOUR_MODEL --langs "eng nld" # to restrict to specific languages
+```
+
+The result for each revision will be written to `results/<revision_name>/<org__model>/results_<timestamp>.json`. The scripts assume that revisions are named in the form `chck_1M, chck_2M, ..., chck_1000M`. If your training scripts follows a different logic, you should alter the script to match the revision names.
+
 ---
 
 ## Collating Results for Submission
@@ -73,7 +84,7 @@ Results are written to `finetune/results/<model>/<lang>/<task>/`.
 Once evaluation is complete, run `scripts/collate_results.py` to produce the submission files:
 
 ```bash
-python scripts/collate_results.py --model_name YOUR_MODEL
+python scripts/collate_results.py --model_name YOUR_MODEL --fast
 ```
 
 This produces **two output files**:
@@ -94,10 +105,11 @@ Zeroshot tasks use the task name as their single key. Finetune tasks use the lan
 
 ### `<model_name>_predictions.json` — raw predictions file
 
-This file is also uploaded to the leaderboard alongside the scores file. It is not used for scoring — it allows organizers to verify submissions if needed. It has two top-level keys:
+This file is also uploaded to the leaderboard alongside the scores file. It is not used for scoring — it allows organizers to verify submissions if needed and to conduct analysis on intermediate checkpoint results. It has three top-level keys:
 
 - **`"zeroshot"`** — the raw lm-eval `results` dict merged across all `results_*.json` files (includes individual subtask rows such as BLiMP paradigms)
 - **`"finetune"`** — keyed as `"{task}_{lang}"` (e.g. `"arc_nl"`), each holding the list of per-example predictions from `predictions.txt`
+- **`"fast_eval_results"` - a list of result dictionaries in the same format as the dictionary held in `<model_name>_submission.json`. We assume that the list is ordered in terms of checkpoint word count.
 
 ```json
 {
@@ -108,9 +120,14 @@ This file is also uploaded to the leaderboard alongside the scores file. It is n
   "finetune": {
     "arc_en": [{"index": 0, "prediction": "C"}, ...],
     "arc_nl": [{"index": 0, "prediction": "B"}, ...]
-  }
+  },
+  "fast_eval_results": [
+     {"blimp": ...}, {"blimp": ...}, ...
+  ]
 }
 ```
+
+Note that the collation script assumes the intermediate checkpoint names follow the format of `chck_{word_count}M`. If this does not follow your naming conventions during training, you should change the `REVISIONS` list.
 
 ### Missing task warnings
 
@@ -145,7 +162,7 @@ Two helper scripts let you inspect results without uploading anything.
 **Zero-shot results table** (markdown, grouped by language):
 
 ```bash
-python scripts/print_results_table.py --results_dir results/
+python scripts/print_results_table.py
 ```
 
 **Finetune results table** (markdown, grouped by language):

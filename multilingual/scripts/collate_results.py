@@ -27,36 +27,44 @@ EXPECTED_FINETUNE = {
     "zh": {"arc", "belebele", "bmlama", "include", "mnli", "sib200", "truthfulqa", "xnli"},
 }
 
+# Fast-eval revisions — scored zeroshot-only at each checkpoint.
+REVISIONS = (
+    [f"chck_{i}M" for i in range(1, 10)]
+    + [f"chck_{i * 10}M" for i in range(1, 10)]
+    + [f"chck_{i * 100}M" for i in range(1, 11)]
+)
 
-def warn_missing_tasks(
-    zeroshot: dict[str, dict[str, float]],
-    finetune: dict[str, dict[str, float]],
-) -> None:
-    """Print warnings for tasks that are missing within a partially-submitted language.
+
+def warn_missing_zeroshot(zeroshot: dict[str, dict[str, float]], label: str) -> None:
+    """Warn about missing zeroshot tasks within any language that has at least one task present.
 
     A language is considered submitted when at least one of its tasks is present.
     Entirely absent languages are silently skipped — incomplete submissions are allowed.
     """
     warned = False
-
     for lang, expected in EXPECTED_ZEROSHOT.items():
         found = expected & zeroshot.keys()
         if not found:
-            continue  # language not submitted at all — skip
+            continue
         for task in sorted(expected - found):
-            print(f"Warning: zeroshot task '{task}' ({lang}) is missing — will be scored as 0.")
+            print(f"[{label}] Warning: zeroshot task '{task}' ({lang}) is missing — will be scored as 0.")
             warned = True
+    if not warned and zeroshot:
+        print(f"[{label}] All zeroshot tasks present for every submitted language.")
 
+
+def warn_missing_finetune(finetune: dict[str, dict[str, float]]) -> None:
+    """Warn about missing finetune tasks within any language that has at least one task present."""
+    warned = False
     for lang_code, expected in EXPECTED_FINETUNE.items():
         found_benchmarks = {task for task, subtasks in finetune.items() if lang_code in subtasks}
         if not found_benchmarks:
-            continue  # language not submitted at all — skip
+            continue
         for task in sorted(expected - found_benchmarks):
-            print(f"Warning: finetune task '{task}' ({lang_code}) is missing — will be scored as 0.")
+            print(f"[main] Warning: finetune task '{task}' ({lang_code}) is missing — will be scored as 0.")
             warned = True
-
-    if not warned:
-        print("All tasks present for every submitted language.")
+    if not warned and finetune:
+        print("[main] All finetune tasks present for every submitted language.")
 
 
 def parse_zeroshot(results: dict) -> dict[str, dict[str, float]]:
@@ -83,6 +91,10 @@ def load_zeroshot(results_dir: Path, model_name: str) -> dict[str, dict[str, flo
     Folder name can be org__model or just model; matches on the part after the last '__'.
     Multiple JSON files in the same folder (one per language run) are merged.
     """
+    if not results_dir.exists():
+        print(f"Warning: no zeroshot results folder found at {results_dir}")
+        return {}
+
     matches = [d for d in results_dir.iterdir() if d.is_dir() and d.name.split("__")[-1] == model_name]
     if not matches:
         print(f"Warning: no zeroshot results folder found for '{model_name}' in {results_dir}")
@@ -128,6 +140,9 @@ def load_finetune(finetune_dir: Path, model_name: str) -> dict[str, dict[str, fl
 
 def load_zeroshot_raw(results_dir: Path, model_name: str) -> dict:
     """Merge the raw lm-eval 'results' dicts from all results_*.json files for a model."""
+    if not results_dir.exists():
+        return {}
+
     matches = [d for d in results_dir.iterdir() if d.is_dir() and d.name.split("__")[-1] == model_name]
     if not matches:
         return {}
@@ -177,13 +192,23 @@ def main():
                         help="Output JSON path (default: <model_name>_submission.json in cwd)")
     parser.add_argument("--output_predictions",
                         help="Output predictions JSON path (default: <model_name>_predictions.json in cwd)")
+    parser.add_argument("--fast", action="store_true",
+                        help="Also collate per-revision zeroshot accuracy summaries from results/<revision>/.")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent.parent  # multilingual/
-    zeroshot = load_zeroshot(root / "results", args.model_name)
+    zeroshot = load_zeroshot(root / "results" / "main", args.model_name)
     finetune = load_finetune(root / "finetune" / "results", args.model_name)
 
-    warn_missing_tasks(zeroshot, finetune)
+    warn_missing_zeroshot(zeroshot, label="main")
+    warn_missing_finetune(finetune)
+
+    fast_summaries: list[dict[str, float]] = []
+    if args.fast:
+        for rev in REVISIONS:
+            rev_zeroshot = load_zeroshot(root / "results" / rev, args.model_name)
+            warn_missing_zeroshot(rev_zeroshot, label=rev)
+            fast_summaries.append({task: subtasks[task] for task, subtasks in rev_zeroshot.items()})
 
     combined = {**zeroshot, **finetune}
 
@@ -202,19 +227,25 @@ def main():
         print(f"  {task}: {avg:.4f}  ({n} subtask{'s' if n > 1 else ''})")
 
     # --- predictions file ---
-    zeroshot_raw = load_zeroshot_raw(root / "results", args.model_name)
+    zeroshot_raw = load_zeroshot_raw(root / "results" / "main", args.model_name)
     finetune_preds = load_finetune_predictions(root / "finetune" / "results", args.model_name)
 
-    if zeroshot_raw or finetune_preds:
+    if zeroshot_raw or finetune_preds or fast_summaries:
         predictions = {
             "zeroshot": zeroshot_raw,
             "finetune": finetune_preds,
         }
+        if fast_summaries:
+            predictions["fast_eval_results"] = fast_summaries
         pred_path = Path(args.output_predictions) if args.output_predictions else Path(f"{args.model_name}_predictions.json")
         with open(pred_path, "w") as f:
             json.dump(predictions, f, indent=2)
-        print(f"Wrote predictions file to {pred_path} "
-              f"({len(zeroshot_raw)} zeroshot tasks, {len(finetune_preds)} finetune task-lang pairs)")
+        msg = (f"Wrote predictions file to {pred_path} "
+               f"({len(zeroshot_raw)} zeroshot tasks, {len(finetune_preds)} finetune task-lang pairs")
+        if fast_summaries:
+            msg += f", {len(fast_summaries)} fast-eval revisions"
+        msg += ")"
+        print(msg)
 
 
 if __name__ == "__main__":
