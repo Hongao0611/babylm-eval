@@ -144,6 +144,8 @@ class Trainer():
 
         progress_bar = tqdm(initial=self.global_step, total=self.total_steps)
         cummulator = 0
+        accumulated_logits = []
+        accumulated_labels = []
 
         for input_data, attention_mask, labels in self.train_dataloader:
             input_data = input_data.to(device=self.device)
@@ -152,8 +154,12 @@ class Trainer():
 
             logits = self.model(input_data, attention_mask)
 
-            loss = F.cross_entropy(logits, labels)
+            # Divide by gradient_accumulation so the accumulated gradient matches
+            # the mean loss over the full effective batch rather than N times it.
+            loss = F.cross_entropy(logits, labels) / self.args.gradient_accumulation
             loss.backward()
+            accumulated_logits.append(logits.detach().cpu())
+            accumulated_labels.append(labels.cpu())
             cummulator += 1
             if cummulator < self.args.gradient_accumulation:
                 continue
@@ -168,7 +174,10 @@ class Trainer():
                     for param_q, param_k in zip(self.model.parameters(), self.ema_model.parameters()):
                         param_k.data.mul_(self.args.ema_decay).add_((1.0 - self.args.ema_decay) * param_q.detach().data)
 
-            metrics = self.calculate_metrics(logits, labels, self.args.metrics)
+            # Compute metrics over the full effective batch, not just the last minibatch.
+            metrics = self.calculate_metrics(torch.cat(accumulated_logits, dim=0), torch.cat(accumulated_labels, dim=0), self.args.metrics)
+            accumulated_logits = []
+            accumulated_labels = []
 
             if hasattr(self, "wandb_run"):
                 self.wandb_run.log(
